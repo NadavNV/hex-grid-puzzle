@@ -450,7 +450,6 @@ public class HexGridPuzzle {
      * @param args the command line arguments
      */
     public static void main(String[] args) {
-        System.out.println("Boo");
         Scanner input = new Scanner(System.in);
         HexGridPuzzle puzzle = null;
         try {
