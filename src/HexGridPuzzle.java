@@ -2,60 +2,67 @@
 import java.util.*;
 
 /**
+ * Given a grid of hexagonal tiles partially-filled with natural numbers,</br>
+ * the goal of this type of puzzle is to completely fill the grid with</br>
+ * numbers such that any number N is adjacent to both its predecessor (N-1)</br>
+ * and its successor (N+1).</br>
+ * </br> 
+ * As a reference for working with a representation of a hexagonal grid I</br>
+ * used 
+ * <a href="http://www.redblobgames.com/grids/hexagons/">this excellent guide</a>
+ * by Amit Patel.
  * 
  * @author NadavNV
  */
 public class HexGridPuzzle {
-    // How recursive steps it took to solve the riddle. Used to compare 
+    // How many recursive steps it took to solve the puzzle. Used to compare 
     // different solving algorithms.
     private static int recursionSteps;
     // The maximum absolute value a coordinate can have in any axis
     private final int maxRadius;
     // Default maximum radius
-    private static final int DEFAULT_MAX_RADIUS = 4;
-    // A collection of the remaining values to place and the nodes in which they can be placed
-    private HashMap<Integer, HashSet<CubeHex>> possibleNodes;
     // The actual grid
     private HashMap<CubeHex,Integer> grid;
-    // zero indicates an empty hex
-    private static int EMPTY_HEX = 0;
-    // The initial state of the grid, as given in the riddle by Intel
-    private static final HashMap<CubeHex, Integer> INITIAL_STATE;
-    static {
-        INITIAL_STATE = new HashMap<>();
-        INITIAL_STATE.put(new CubeHex(-2, 1, 1), 1);
-        INITIAL_STATE.put(new CubeHex(-3, 2, 1), 2);
-        INITIAL_STATE.put(new CubeHex(-1, 2, -1), 5);
-        INITIAL_STATE.put(new CubeHex(-1, 3, -2), 7);
-        INITIAL_STATE.put(new CubeHex(-4, 1, 3), 16);
-        INITIAL_STATE.put(new CubeHex(-3, 0, 3), 17);
-        INITIAL_STATE.put(new CubeHex(-1, -1, 2), 20);
-        INITIAL_STATE.put(new CubeHex(-1, 1, 0), 23);
-        INITIAL_STATE.put(new CubeHex(0, 2, -2), 26);
-        INITIAL_STATE.put(new CubeHex(1, 1, -2), 31);
-        INITIAL_STATE.put(new CubeHex(2, 0, -2), 33);
-        INITIAL_STATE.put(new CubeHex(3, -1, -2), 39);
-        INITIAL_STATE.put(new CubeHex(3, -2, -1), 40);
-        INITIAL_STATE.put(new CubeHex(3, -3, 0), 43);
-        INITIAL_STATE.put(new CubeHex(1, -4, 3), 46);
-        INITIAL_STATE.put(new CubeHex(1, -3, 2), 47);
-        INITIAL_STATE.put(new CubeHex(-1, -2, 3), 58);
-        INITIAL_STATE.put(new CubeHex(-4, 0, 4), 61);
-    }
     // The values that haven't been placed in the grid yet
     private SortedSet<Integer> remainingValues;
-    public enum MenuOption {
-        SOLVE_DFS, SOLVE_PATH
+    private static final int DEFAULT_MAX_RADIUS = 4;
+    // zero indicates an empty hex
+    private static int EMPTY_HEX = 0;
+    // The initial state of the grid, as given in the puzzle by Intel
+    private static final HashMap<CubeHex, Integer> DEFAULT_INITIAL_STATE;
+    static {
+        DEFAULT_INITIAL_STATE = new HashMap<>();
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-2, 1, 1), 1);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-3, 2, 1), 2);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-1, 2, -1), 5);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-1, 3, -2), 7);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-4, 1, 3), 16);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-3, 0, 3), 17);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-1, -1, 2), 20);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-1, 1, 0), 23);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(0, 2, -2), 26);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(1, 1, -2), 31);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(2, 0, -2), 33);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(3, -1, -2), 39);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(3, -2, -1), 40);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(3, -3, 0), 43);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(1, -4, 3), 46);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(1, -3, 2), 47);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-1, -2, 3), 58);
+        DEFAULT_INITIAL_STATE.put(new CubeHex(-4, 0, 4), 61);
     }
-    
-    
+    // Creates an instance of the puzzle with the default state given above.
     public HexGridPuzzle() {
         this(DEFAULT_MAX_RADIUS);
     }
     
+    
+    // Creates an instance of this puzzle on a grid with the given radius.
+    // Will be adapted to take an initial state from the user, instead of
+    // the default state.
     public HexGridPuzzle(int maxRadius) throws IllegalArgumentException {
         if (maxRadius < 0) {
-            throw new IllegalArgumentException("Radius must be unsigned integer");
+            throw new IllegalArgumentException("Radius must be anunsigned integer");
         }
         //System.err.println(maxRadius);
         this.maxRadius = maxRadius;
@@ -69,8 +76,8 @@ public class HexGridPuzzle {
             remainingValues.add(i);
         }
         int value;
-        for (CubeHex hex: INITIAL_STATE.keySet()) {
-            value = INITIAL_STATE.get(hex);
+        for (CubeHex hex: DEFAULT_INITIAL_STATE.keySet()) {
+            value = DEFAULT_INITIAL_STATE.get(hex);
             remainingValues.remove(value);
             grid.put(hex, value);
         }
@@ -78,15 +85,17 @@ public class HexGridPuzzle {
         
     }
     
+    // Currently supports the case where numbers are at most 2 digits.
+    // Will be adapted to support longer numbers.
     private void printGrid() {
         SortedSet<CubeHex> hexes = new TreeSet<>(grid.keySet());
         String separator = "  ";
         // How many nodes to print in the current line
         int nodesToPrint = maxRadius + 1;
-        // How mcuh whitespace to leave before the first node
+        // How much whitespace to leave before the first node
         int spaces = maxRadius;
-        // print lines until the middle line
-        Iterator it = hexes.iterator();
+        // print lines up to the middle line
+        Iterator<CubeHex> it = hexes.iterator();
         for (; nodesToPrint < 2*maxRadius+1; nodesToPrint++, spaces--) {
             for (int i = 0; i < spaces; i++) {
                 System.out.print(separator);
@@ -98,7 +107,7 @@ public class HexGridPuzzle {
             System.out.println("");
         }
         // print remaining lines
-        for (/*nodesToPrint = 2*maxRadius, spaces = 1*/; nodesToPrint >= maxRadius+1; nodesToPrint--, spaces++) {
+        for (; nodesToPrint >= maxRadius+1; nodesToPrint--, spaces++) {
             for (int i = 0; i < spaces; i++) {
                 System.out.print(separator);
             }
@@ -110,7 +119,7 @@ public class HexGridPuzzle {
         }
     }
     
-    // Finds the coordinate in the grid of the given value
+    // Finds the coordinate in the grid of the given value.
     // The inverse of searching the map by key. Returns null
     // if the value doesn't exist on the grid.
     private CubeHex getPosition(int value) throws IllegalArgumentException {
@@ -125,7 +134,7 @@ public class HexGridPuzzle {
         return null;
     }
     
-    
+    /*
     public void solvePathfinding() {
         
         
@@ -142,7 +151,17 @@ public class HexGridPuzzle {
         }
         
     }
+    */
     
+    /*
+     * Finding a solution to this puzzle is equivalent to finding a path
+     * that covers the whole grid and does not repeat itself. 
+     * A possible way to solve this is to find partial paths to close the gaps
+     * between the numbers that are already on the grid, trying to find the
+     * shortest path each time.
+     *
+     * Currently a work in progress, does not solve correctly.
+     */
     private class PathSolver implements Solver {
         
         @Override
@@ -279,7 +298,7 @@ public class HexGridPuzzle {
                     if (getAdjacentValues(neighbor).contains(currentValue + 1)) {
                         // Nodes that are part of the initial problem
                         // declaration should not be changed
-                        assert !INITIAL_STATE.keySet().contains(neighbor);
+                        assert !DEFAULT_INITIAL_STATE.keySet().contains(neighbor);
                         remainingValues.remove(currentValue);
                         grid.put(neighbor, currentValue);
                         // System.err.println("Placing " + currentValue + " at " + neighbor.toString());
@@ -307,7 +326,7 @@ public class HexGridPuzzle {
 
                     // Nodes that are part of the initial problem
                     // declaration should not be changed
-                    assert !INITIAL_STATE.keySet().contains(neighbor);
+                    assert !DEFAULT_INITIAL_STATE.keySet().contains(neighbor);
                     remainingValues.remove(currentValue);
                     grid.put(neighbor, currentValue);
                     if (remainingValues.isEmpty()) {
@@ -333,22 +352,11 @@ public class HexGridPuzzle {
         }
     }
 
-    private void solve(MenuOption algorithm) throws IllegalArgumentException {
-        Solver solver;
+    private void solve(Solver solver) {
         System.out.println("Initial state:");
         printGrid();
-        switch (algorithm) {
-            case SOLVE_DFS:
-                solver = new DFSSolver();
-                break;
-            case SOLVE_PATH:
-                solver = new PathSolver();
-                break;
-            default:
-                throw new IllegalArgumentException("Invalid algorithm: " + algorithm);
-        }
         if (initialzeSolution(solver)) {
-            System.out.println("Riddle solved successfully with " + 
+            System.out.println("Puzzle solved successfully with " + 
                     recursionSteps + " recursive calls.");
         } else {
             System.out.println("Could not find solution within " + 
@@ -461,11 +469,11 @@ public class HexGridPuzzle {
                 int selection = input.nextInt();
                 switch (selection) {
                     case 1:
-                        puzzle.solve(MenuOption.SOLVE_DFS);
+                        puzzle.solve(puzzle.new DFSSolver());
                         running = false;
                         break;
                     case 2:
-                        puzzle.solve(MenuOption.SOLVE_PATH);
+                        puzzle.solve(puzzle.new PathSolver());
                         running = false;
                         break;
                     default:

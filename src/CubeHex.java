@@ -1,11 +1,8 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
 /**
- *
+ * Implementation of a tile on a hexagonal grid as explained in
+ * <a href="http://www.redblobgames.com/grids/hexagons/">this excellent guide</a>
+ * by Amit Patel.
+ * 
  * @author NadavNV
  */
 
