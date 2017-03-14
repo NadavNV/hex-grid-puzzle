@@ -16,3 +16,5 @@ testing I've done so far, this method seems more efficient than DFS in every sit
 
 Features that I plan to add in the future are the ability to generate riddles of this kind, and to let the user input a starting
 board state for the program to attempt to solve.
+
+Currently the program also creates a log file called "log.txt" that displays every step the algorithm took before finding the solution.
