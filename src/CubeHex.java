@@ -115,6 +115,10 @@ class CubeHex implements Comparable<CubeHex> {
         
         @Override
         public int compare(CubeHex o1, CubeHex o2) {
+//            System.out.println("Distance of " + o1 + " from " + root + ":");
+//            System.out.println(o1.distanceTo(root));            
+//            System.out.println("Distance of " + o2 + " from " + root + ":");
+//            System.out.println(o1.distanceTo(root));
             return Integer.compare(o1.distanceTo(root), o2.distanceTo(root));
         }
         

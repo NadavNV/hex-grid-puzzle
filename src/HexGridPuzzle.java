@@ -1,4 +1,11 @@
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.file.Files;
 import java.util.*;
 
 /**
@@ -15,6 +22,10 @@ import java.util.*;
  * @author NadavNV
  */
 public class HexGridPuzzle {
+    // Used for debugging
+    private File logFile;
+    private static final String LOG_PATH = "log.txt";
+    private PrintStream logWriteStream;
     // How many recursive steps it took to solve the puzzle. Used to compare 
     // different solving algorithms.
     private static int recursionSteps;
@@ -52,7 +63,7 @@ public class HexGridPuzzle {
         DEFAULT_INITIAL_STATE.put(new CubeHex(-4, 0, 4), 61);
     }
     // Creates an instance of the puzzle with the default state given above.
-    public HexGridPuzzle() {
+    public HexGridPuzzle() throws IOException{
         this(DEFAULT_MAX_RADIUS);
     }
     
@@ -60,10 +71,12 @@ public class HexGridPuzzle {
     // Creates an instance of this puzzle on a grid with the given radius.
     // Will be adapted to take an initial state from the user, instead of
     // the default state.
-    public HexGridPuzzle(int maxRadius) throws IllegalArgumentException {
+    public HexGridPuzzle(int maxRadius) throws IllegalArgumentException, IOException {
         if (maxRadius < 0) {
             throw new IllegalArgumentException("Radius must be anunsigned integer");
         }
+        logFile = new File(LOG_PATH);
+        logWriteStream = new PrintStream(logFile);
         //System.err.println(maxRadius);
         this.maxRadius = maxRadius;
         
@@ -87,7 +100,7 @@ public class HexGridPuzzle {
     
     // Currently supports the case where numbers are at most 2 digits.
     // Will be adapted to support longer numbers.
-    private void printGrid() {
+    private void printGrid(PrintStream output) {
         SortedSet<CubeHex> hexes = new TreeSet<>(grid.keySet());
         String separator = "  ";
         // How many nodes to print in the current line
@@ -98,25 +111,26 @@ public class HexGridPuzzle {
         Iterator<CubeHex> it = hexes.iterator();
         for (; nodesToPrint < 2*maxRadius+1; nodesToPrint++, spaces--) {
             for (int i = 0; i < spaces; i++) {
-                System.out.print(separator);
+                output.print(separator);
             }
-            System.out.format("%2d", grid.get(it.next()));
+            output.format("%2d", grid.get(it.next()));
             for (int i = 1; i < nodesToPrint; i++) {
-                System.out.format(separator + "%2d", grid.get(it.next()));
+                output.format(separator + "%2d", grid.get(it.next()));
             }
-            System.out.println("");
+            output.println();
         }
         // print remaining lines
         for (; nodesToPrint >= maxRadius+1; nodesToPrint--, spaces++) {
             for (int i = 0; i < spaces; i++) {
-                System.out.print(separator);
+                output.print(separator);
             }
-            System.out.format("%2d", grid.get(it.next()));
+            output.format("%2d", grid.get(it.next()));
             for (int i = 1; i < nodesToPrint; i++) {
-                System.out.format(separator + "%2d", grid.get(it.next()));
+                output.format(separator + "%2d", grid.get(it.next()));
             }
-            System.out.println("");
+            output.println();
         }
+        output.println();
     }
     
     // Finds the coordinate in the grid of the given value.
@@ -134,24 +148,6 @@ public class HexGridPuzzle {
         return null;
     }
     
-    /*
-    public void solvePathfinding() {
-        
-        
-        // I know the first and last values are already placed, so I will
-        // not check for those corner cases. If necessary I can add them later
-        recursionSteps = 0;
-        boolean solved = false;
-        PathSolver solver = new PathSolver();
-        int nextValue = Collections.min(remainingValues);
-        if (nextValue == 1) { // No definitive starting position to search from
-            solved = initialzeSolution(solver);
-        } else {
-            solved = solver.solve(nextValue);
-        }
-        
-    }
-    */
     
     /*
      * Finding a solution to this puzzle is equivalent to finding a path
@@ -159,13 +155,11 @@ public class HexGridPuzzle {
      * A possible way to solve this is to find partial paths to close the gaps
      * between the numbers that are already on the grid, trying to find the
      * shortest path each time.
-     *
-     * Currently a work in progress, does not solve correctly.
      */
     private class PathSolver implements Solver {
-        
+        private static final String NAME = "Pathfinding";
         @Override
-        public boolean solve(int nextValue) {
+        public boolean solve(int currentValue) {
             /*
             Find next remaining value
             Find its parent
@@ -174,43 +168,58 @@ public class HexGridPuzzle {
             If no such value exists, try each of the parent's neighbors in DFS
             Finally check validity of solution
             */
-            System.err.println("Path solving for " + nextValue);
-            CubeHex parent = getPosition(nextValue - 1);
+//            logWriteStream.println("Path solving for " + currentValue);
+            CubeHex parent = getPosition(currentValue - 1);
+//            logWriteStream.println("Parent " + (currentValue - 1) +
+//                    " is at " + parent);
             CubeHex target = null;
             for (int value : new TreeSet<>(grid.values())) {
-                if (value > nextValue) {
+                if (value > currentValue) {
                     target = getPosition(value);
                     break;
                 }
             }
             if (target == null) {
-                System.err.println("Going DFS");
+                logWriteStream.println("Going DFS");
                 // No higher values exist, so we switch to a simple DFS solution
                 DFSSolver solver = new DFSSolver();
-                solver.solve(nextValue);
+                return solver.solve(currentValue);
             }
+//            logWriteStream.println("Target " + grid.get(target) + " is at " + target);
             recursionSteps++;
             // Try possible nodes according to how close they are to the target.
-            SortedSet<CubeHex> candidates = new TreeSet<>(new CubeHex.DistanceComparator(target));
-            candidates.addAll(parent.getNeighbors());
+            ArrayList<CubeHex> candidates = new ArrayList<>();
+            candidates.sort(new CubeHex.DistanceComparator(target));
+            candidates.addAll(getEmptyNeighbors(parent));
             for (CubeHex candidate: candidates) {
-                if (grid.containsKey(candidate) &&
-                        grid.get(candidate) == EMPTY_HEX) {
-                    remainingValues.remove(nextValue);
-                    grid.put(candidate, nextValue);
+                // If the distance is larger then we can't reach
+                // target in time.
+                if (candidate.distanceTo(target) <=
+                        grid.get(target) - currentValue) {
+                    logWriteStream.println("Placing " + currentValue + " at " + candidate);
+                    remainingValues.remove(currentValue);
+                    grid.put(candidate, currentValue);
+                    printGrid(logWriteStream);
                     if (remainingValues.isEmpty()) {
                         return checkSolution();
                     } else if (solve(Collections.min(remainingValues))) {
                         return true;
                     } else {
                         // Undo previous step
+                        logWriteStream.println("Could not place " + currentValue + " at " + candidate);
                         grid.put(candidate, EMPTY_HEX);
-                        remainingValues.add(nextValue);
+                        remainingValues.add(currentValue);
+                        printGrid(logWriteStream);
                     }
                 }
             }
             
             return false;
+        }
+
+        @Override
+        public String getName() {
+            return NAME;
         }
     }
     
@@ -218,53 +227,71 @@ public class HexGridPuzzle {
     
     // In the case that 1 isn't already on the grid, we need to attempt to
     // place it, and then attemp to solve from there.
-    private boolean initialzeSolution(Solver solver) {
+    private boolean initializeSolution(Solver solver) {
         recursionSteps = 0;
         HashSet<Integer> placedValues = new HashSet<>(grid.values());
         placedValues.remove(EMPTY_HEX);
         int lowestPlacedValue = Collections.min(placedValues);
         if (lowestPlacedValue != 1) {
+            logWriteStream.println("Lowest placed value is: " + lowestPlacedValue);
             CubeHex target = getPosition(lowestPlacedValue);
             // Attempt to start from all the hexes that are at most 
             // lowerPlacedValue distance from the next placed value. If the 
             // distance is greater than that then the path will never reach
             // that value in time.
-            HashSet<CubeHex> candidates = getNodesWithinDistance(target, lowestPlacedValue-1);
+            ArrayList<CubeHex> candidates = new ArrayList<>(getNodesWithinDistance(target, lowestPlacedValue-1));
+            // As the smallest number initially on the board is higher,
+            // even if it's as low as 5, randomly trying to place the initial
+            // causes the solution to be very slow, even when using the faster
+            // solvers. Merely sorting the possible starting points by their
+            // distance from the smallest value on the board reduces running
+            // time considerably.
+            candidates.sort(new CubeHex.DistanceComparator(target));
+            logWriteStream.println("Candidates for starting position:");
+            logWriteStream.println(candidates);
             for (CubeHex candidate : candidates) {
                 if (grid.get(candidate) == EMPTY_HEX) {
                     // Attempt to place 1 at this position
+                    logWriteStream.println("Placing 1 at " + candidate);
                     remainingValues.remove(1);
                     grid.put(candidate, 1);
+                    printGrid(logWriteStream);
                     if (solver.solve(Collections.min(remainingValues))) {
                         return true;
                     } else {
                         // Undo previous step
+                        logWriteStream.println("Could not place 1 at " + candidate);
                         grid.put(candidate, EMPTY_HEX);
                         remainingValues.add(1);
+                        printGrid(logWriteStream);
                     }
                 }
-            }            
+            }
+            logWriteStream.println("Could not solve from any starting position.");
+            return false;
+        } else {
+            return solver.solve(Collections.min(remainingValues));
         }
-        
-        return solver.solve(Collections.min(remainingValues));
     }
     
     // Find all nodes within a certain distance from the given node (exclusing
-    // the node itself).
-    private HashSet<CubeHex> getNodesWithinDistance(CubeHex node, int distance) {
+    // the node itself). Assuming distance is greater than zero.
+    private HashSet<CubeHex> getNodesWithinDistance(CubeHex root, int distance) {
         HashSet<CubeHex> alreadyChecked = new HashSet<>();
-        alreadyChecked.add(node);
+        alreadyChecked.add(root);
         HashSet<CubeHex> result = new HashSet<>();
         HashSet<CubeHex> toCheck = new HashSet<>();
-        toCheck.addAll(node.getNeighbors());
+        toCheck.addAll(root.getNeighbors());
         while (!toCheck.isEmpty()) {
-            for (CubeHex hex: toCheck) {
+            HashSet<CubeHex> toCheckClone = new HashSet<>(toCheck);
+            for (CubeHex hex: toCheckClone) {
                 alreadyChecked.add(hex);
                 toCheck.remove(hex);
                 if (grid.containsKey(hex)) {
-                    if (hex.distanceTo(node) <= distance) {
+                    if (hex.distanceTo(root) <= distance) {
                         result.add(hex);
-                    } else if (hex.distanceTo(node) < distance) {
+                    }
+                    if (hex.distanceTo(root) < distance) {
                         HashSet<CubeHex> neighbors = hex.getNeighbors();
                         neighbors.removeAll(alreadyChecked);
                         toCheck.addAll(neighbors);
@@ -276,6 +303,7 @@ public class HexGridPuzzle {
     }
     
     private class DFSSolver implements Solver {
+        private static final String NAME = "DFS";
         @Override
         public boolean solve(int currentValue) {
             /*
@@ -285,84 +313,63 @@ public class HexGridPuzzle {
             Finally check validity of solution
             */
             
-            // System.err.println("Trying to place " + currentValue);
             // If the next value is already placed, then the current value must be
             // placed next to it.
             recursionSteps++;
             boolean nextValueExists = !remainingValues.contains(currentValue + 1);
             CubeHex parent = getPosition(currentValue - 1);
-            if (nextValueExists) {
-                for (CubeHex neighbor: getEmptyNeighbors(parent)) {
-                    // Placing currentValue here will make it adjacent to both its
-                    // successor and predecessor.
-                    if (getAdjacentValues(neighbor).contains(currentValue + 1)) {
-                        // Nodes that are part of the initial problem
-                        // declaration should not be changed
-                        assert !DEFAULT_INITIAL_STATE.keySet().contains(neighbor);
-                        remainingValues.remove(currentValue);
-                        grid.put(neighbor, currentValue);
-                        // System.err.println("Placing " + currentValue + " at " + neighbor.toString());
-                        if (remainingValues.isEmpty()) {
-                            /*
-                             * No more values to place, so we check if the current
-                             * grid represents a good solution, and cascade the 
-                             * answer back up the recursion.
-                             */                        
-                            return checkSolution();
-                        } else if (solve(Collections.min(remainingValues))) {
-                            // Found a solution, so we cascade it up the recursion.
-                            return true;
-                        } else {
-                            // undo previous step before checking the next neighbor.
-                            // System.err.println("Could not place " + currentValue + " at " + neighbor.toString());
-                            grid.put(neighbor, EMPTY_HEX);
-                            remainingValues.add(currentValue);
-                        }
-                    }
-                }
-            } else {
-                for (CubeHex neighbor: getEmptyNeighbors(parent)) {
-                    // System.err.println("Placing " + currentValue + " at " + neighbor.toString());
-
+            for (CubeHex candidate: getEmptyNeighbors(parent)) {
+                if (remainingValues.contains(currentValue + 1) ||
+                    getAdjacentValues(candidate).contains(currentValue + 1) || 
+                    currentValue > Collections.max(grid.values())) {
                     // Nodes that are part of the initial problem
                     // declaration should not be changed
-                    assert !DEFAULT_INITIAL_STATE.keySet().contains(neighbor);
+                    assert !DEFAULT_INITIAL_STATE.keySet().contains(candidate);
+                    logWriteStream.println("Placing " + currentValue + " at " + candidate);
                     remainingValues.remove(currentValue);
-                    grid.put(neighbor, currentValue);
+                    grid.put(candidate, currentValue);
+                    printGrid(logWriteStream);
                     if (remainingValues.isEmpty()) {
                         /*
-                             * No more values to place, so we check if the current
-                             * grid represents a good solution, and cascade the 
-                             * answer back up the recursion.
-                             */                        
-                            return checkSolution();
-                    } else if (solve(currentValue + 1)) { // Attempt to place the next value
+                         * No more values to place, so we check if the current
+                         * grid represents a good solution, and cascade the 
+                         * answer back up the recursion.
+                         */                        
+                        return checkSolution();
+                    } else if (solve(Collections.min(remainingValues))) { // Attempt to place the next value
                         // Found a solution, so we cascade it up the recursion.
                         return true;
                     } else {
                         // undo previous step before checking the next neighbor.
-                        // System.err.println("Could not place " + currentValue + " at " + neighbor.toString());
-                        grid.put(neighbor, EMPTY_HEX);
+                        logWriteStream.println("Could not place " + currentValue + " at " + candidate);
+                        grid.put(candidate, EMPTY_HEX);
                         remainingValues.add(currentValue);
+                        printGrid(logWriteStream);
                     }
                 }
             }
             // Couldn't place currentValue in any viable neighbor
             return false;
         }
+
+        @Override
+        public String getName() {
+            return NAME;
+        }
     }
 
     private void solve(Solver solver) {
         System.out.println("Initial state:");
-        printGrid();
-        if (initialzeSolution(solver)) {
+        printGrid(System.out);
+        logWriteStream.println("Attempting to solve with " + solver.getName());
+        if (initializeSolution(solver)) {
             System.out.println("Puzzle solved successfully with " + 
                     recursionSteps + " recursive calls.");
         } else {
             System.out.println("Could not find solution within " + 
                     recursionSteps + " steps. Solution does not exist?");
         }
-        printGrid();
+        printGrid(System.out);
     }
     
     
@@ -454,7 +461,7 @@ public class HexGridPuzzle {
         HexGridPuzzle puzzle = null;
         try {
             puzzle = new HexGridPuzzle();
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             System.err.println(e.getMessage());
             System.exit(1);
         }
@@ -463,7 +470,7 @@ public class HexGridPuzzle {
         while (running) {
             System.out.println("What would you like to do?");
             System.out.println("1) Solve using a simple DFS algorithm.");
-            System.out.println("2) Solve through pathfinding. (WIP)");
+            System.out.println("2) Solve through pathfinding.");
             try {
                 int selection = input.nextInt();
                 switch (selection) {
@@ -482,6 +489,13 @@ public class HexGridPuzzle {
             } catch (InputMismatchException e) {
                 System.out.println("Please enter an integer number.\n");
                 input.nextLine(); // remove the faulty line from the stream
+            } finally {
+                try {
+                    puzzle.logWriteStream.close();
+                } catch (Exception e) {
+                    System.err.println(e.getMessage());
+                    System.err.println(e.getStackTrace());
+                }
             }
             
         }
